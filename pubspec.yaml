@@ -46,8 +46,7 @@ dependencies:
   intl: ^0.20.2
   video_player: ^2.11.0
   photo_manager: ^3.8.2
-  ffmpeg_kit_flutter_new_min_gpl: ^2.1.1
-  ffmpeg_kit_flutter_min_gpl: any
+  ffmpeg_kit_flutter_min_gpl: ^6.0.3
   file_picker: ^8.0.0
 
 dev_dependencies:
