@@ -18,10 +18,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart' as pm;
 import 'package:video_player/video_player.dart';
-import 'package:ffmpeg_kit_flutter_min_gpl/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_min_gpl/ffmpeg_kit.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
+import 'package:ffmpeg_kit_min_gpl/return_code.dart';
 
 dynamic _deepFix(dynamic v) {
   if (v is Map) {

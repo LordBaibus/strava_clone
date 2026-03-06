@@ -5,7 +5,7 @@
 import FlutterMacOS
 import Foundation
 
-import ffmpeg_kit_flutter_min_gpl
+import ffmpeg_kit_min_gpl
 import file_picker
 import file_selector_macos
 import geolocator_apple
