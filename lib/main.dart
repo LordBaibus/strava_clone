@@ -2648,6 +2648,12 @@ class _VideoSlideState extends State<_VideoSlide> {
   bool _hasError = false;
 
   @override
+  void deactivate() {
+    _controller?.pause();
+    super.deactivate();
+  }
+
+  @override
   void initState() {
     super.initState();
     _initVideo();
@@ -2663,6 +2669,7 @@ class _VideoSlideState extends State<_VideoSlide> {
 
       _controller = VideoPlayerController.file(file);
       await _controller!.initialize();
+      await _controller!.setVolume(0);
       await _controller!.setLooping(true);
 
       if (!mounted) return;
@@ -3029,6 +3036,7 @@ class SharePage extends StatefulWidget {
 class _SharePageState extends State<SharePage> {
   final ImagePicker _picker = ImagePicker();
 
+  bool _isSaving = false;
   File? _bgImage;
   File? _bgVideo;
   VideoPlayerController? _videoCtrl;
@@ -3242,9 +3250,9 @@ class _SharePageState extends State<SharePage> {
 
   Future<String> _captureKeyToPngFile(
       GlobalKey key, {
-        double pixelRatio = 3.0,
+        double pixelRatio = 2.0,
       }) async {
-    await Future.delayed(const Duration(milliseconds: 50));
+    await Future.delayed(const Duration(milliseconds: 80));
     await WidgetsBinding.instance.endOfFrame;
 
     final context = key.currentContext;
@@ -3258,7 +3266,7 @@ class _SharePageState extends State<SharePage> {
     }
 
     if (renderObject.debugNeedsPaint) {
-      await Future.delayed(const Duration(milliseconds: 30));
+      await Future.delayed(const Duration(milliseconds: 50));
       await WidgetsBinding.instance.endOfFrame;
     }
 
@@ -3279,8 +3287,12 @@ class _SharePageState extends State<SharePage> {
   }
 
   Future<void> _save() async {
+    if (_isSaving) return;
+
+    setState(() => _isSaving = true);
+
     try {
-      // DESKTOP: only PNG export is supported in your current code
+      // DESKTOP
       if (_isDesktop) {
         if (_bgVideo != null) {
           _toast("Video export is not supported on desktop in your current build. Only PNG export works.");
@@ -3299,7 +3311,7 @@ class _SharePageState extends State<SharePage> {
         return;
       }
 
-      // MOBILE / iOS / Android
+      // iPhone / iPad / Android
       final ps = await pm.PhotoManager.requestPermissionExtend();
       final ok = ps.isAuth || ps.hasAccess;
       if (!ok) {
@@ -3309,36 +3321,72 @@ class _SharePageState extends State<SharePage> {
 
       // IMAGE BACKGROUND
       if (_bgVideo == null) {
-        final outPng = await _captureKeyToPngFile(_fullPreviewKey);
+        final outPng = await _captureKeyToPngFile(_fullPreviewKey, pixelRatio: 2.0);
         final saved = await pm.PhotoManager.editor.saveImageWithPath(
           outPng,
           title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
         );
-        _toast(saved != null ? "Saved image to Photos/Gallery." : "Failed to save image.");
-        return;
-      }
 
-      if (_overlayOnlyKey.currentContext == null) {
-        _toast("Overlay is not ready yet. Try again in a moment.");
+        _toast(saved != null
+            ? "Saved image to Photos/Gallery."
+            : "Failed to save image.");
         return;
       }
 
       // VIDEO BACKGROUND
-      final overlayPng = await _captureKeyToPngFile(_overlayOnlyKey);
+      if (_videoCtrl != null && _videoCtrl!.value.isPlaying) {
+        await _videoCtrl!.pause();
+      }
+
+      await Future.delayed(const Duration(milliseconds: 120));
+      await WidgetsBinding.instance.endOfFrame;
+
+      if (_overlayOnlyKey.currentContext == null) {
+        _toast("Overlay is not ready yet. Try again.");
+        return;
+      }
+
+      final overlayPng = await _captureKeyToPngFile(
+        _overlayOnlyKey,
+        pixelRatio: 2.0,
+      );
+
       final inVideo = _bgVideo!.path;
       final dir = await getTemporaryDirectory();
       final outVideo = "${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}.mp4";
 
       final cmd =
-          '-y -i "$inVideo" -i "$overlayPng" '
-          '-filter_complex "[1:v][0:v]scale2ref[ov][base];[base][ov]overlay=0:0:format=auto" '
-          '-map 0:a? -c:a copy -c:v libx264 -preset veryfast -crf 18 "$outVideo"';
+          '-y '
+          '-i "$inVideo" '
+          '-i "$overlayPng" '
+          '-filter_complex "[1:v][0:v]scale2ref=flags=lanczos[ov][base];[base][ov]overlay=0:0" '
+          '-map 0:v:0 -map 0:a? '
+          '-c:v libx264 '
+          '-preset ultrafast '
+          '-crf 20 '
+          '-pix_fmt yuv420p '
+          '-c:a aac '
+          '-b:a 128k '
+          '-movflags +faststart '
+          '"$outVideo"';
 
-      await FFmpegKit.execute(cmd);
+      final session = await FFmpegKit.execute(cmd);
+      final returnCode = await session.getReturnCode();
+
+      if (!ReturnCode.isSuccess(returnCode)) {
+        _toast("Video export failed. FFmpeg did not finish successfully.");
+        return;
+      }
 
       final outputFile = File(outVideo);
       if (!await outputFile.exists()) {
-        _toast("Video export failed. FFmpeg did not create the output file.");
+        _toast("Video export failed. Output file was not created.");
+        return;
+      }
+
+      final fileSize = await outputFile.length();
+      if (fileSize <= 0) {
+        _toast("Video export failed. Output file is empty.");
         return;
       }
 
@@ -3349,10 +3397,15 @@ class _SharePageState extends State<SharePage> {
 
       _toast(savedVideo != null
           ? "Saved video to Photos/Gallery."
-          : "Failed to save video.");
-    } catch (e) {
+          : "Export succeeded, but saving to Photos failed.");
+    } catch (e, st) {
       debugPrint("Save error: $e");
+      debugPrint("$st");
       _toast("Save failed.\n$e");
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -3434,21 +3487,17 @@ class _SharePageState extends State<SharePage> {
                   ),
                 ),
 
-                SizedOverflowBox(
-                  size: Size.zero,
-                  alignment: Alignment.topCenter,
+                Transform.translate(
+                  offset: const Offset(-10000, 0),
                   child: IgnorePointer(
-                    child: Opacity(
-                      opacity: 0.01,
-                      child: SizedBox(
-                        width: previewW,
-                        height: previewH,
-                        child: RepaintBoundary(
-                          key: _overlayOnlyKey,
-                          child: Container(
-                            color: Colors.transparent,
-                            child: overlay,
-                          ),
+                    child: SizedBox(
+                      width: previewW,
+                      height: previewH,
+                      child: RepaintBoundary(
+                        key: _overlayOnlyKey,
+                        child: Container(
+                          color: Colors.transparent,
+                          child: overlay,
                         ),
                       ),
                     ),
