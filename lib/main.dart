@@ -3240,16 +3240,41 @@ class _SharePageState extends State<SharePage> {
     });
   }
 
-  Future<String> _captureKeyToPngFile(GlobalKey key, {double pixelRatio = 3.0}) async {
-    final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-    final img = await boundary.toImage(pixelRatio: pixelRatio);
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    final bytes = byteData!.buffer.asUint8List();
+  Future<String> _captureKeyToPngFile(
+      GlobalKey key, {
+        double pixelRatio = 3.0,
+      }) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    await WidgetsBinding.instance.endOfFrame;
 
+    final context = key.currentContext;
+    if (context == null) {
+      throw Exception("Capture failed: widget context is null.");
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject == null || renderObject is! RenderRepaintBoundary) {
+      throw Exception("Capture failed: repaint boundary not found.");
+    }
+
+    if (renderObject.debugNeedsPaint) {
+      await Future.delayed(const Duration(milliseconds: 30));
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    final image = await renderObject.toImage(pixelRatio: pixelRatio);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    if (byteData == null) {
+      throw Exception("Capture failed: PNG byte data is null.");
+    }
+
+    final bytes = byteData.buffer.asUint8List();
     final dir = await getTemporaryDirectory();
     final path = "${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}.png";
-    final f = File(path);
-    await f.writeAsBytes(bytes, flush: true);
+
+    final file = File(path);
+    await file.writeAsBytes(bytes, flush: true);
     return path;
   }
 
@@ -3290,6 +3315,11 @@ class _SharePageState extends State<SharePage> {
           title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
         );
         _toast(saved != null ? "Saved image to Photos/Gallery." : "Failed to save image.");
+        return;
+      }
+
+      if (_overlayOnlyKey.currentContext == null) {
+        _toast("Overlay is not ready yet. Try again in a moment.");
         return;
       }
 
@@ -3404,14 +3434,23 @@ class _SharePageState extends State<SharePage> {
                   ),
                 ),
 
-                Offstage(
-                  offstage: true,
-                  child: SizedBox(
-                    width: previewW,
-                    height: previewH,
-                    child: RepaintBoundary(
-                      key: _overlayOnlyKey,
-                      child: Container(color: Colors.transparent, child: overlay),
+                SizedOverflowBox(
+                  size: Size.zero,
+                  alignment: Alignment.topCenter,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.01,
+                      child: SizedBox(
+                        width: previewW,
+                        height: previewH,
+                        child: RepaintBoundary(
+                          key: _overlayOnlyKey,
+                          child: Container(
+                            color: Colors.transparent,
+                            child: overlay,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
