@@ -3529,7 +3529,7 @@ class _ShareOverlay extends StatelessWidget {
               border: Border.all(color: Colors.white.withOpacity(0.65), width: 1),
             ),
             child: const Text(
-              "TRANSPARENT",
+              "",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
