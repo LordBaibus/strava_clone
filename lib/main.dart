@@ -2561,7 +2561,7 @@ class _MediaCarouselState extends State<_MediaCarousel> {
 
               if (type == "video") {
                 return _CarouselCard(
-                  child: _VideoPlaceholder(path: path),
+                  child: _VideoSlide(path: path),
                 );
               }
 
@@ -2634,39 +2634,105 @@ class _ImageSlide extends StatelessWidget {
   }
 }
 
-class _VideoPlaceholder extends StatelessWidget {
+class _VideoSlide extends StatefulWidget {
   final String path;
-  const _VideoPlaceholder({required this.path});
+  const _VideoSlide({super.key, required this.path});
+
+  @override
+  State<_VideoSlide> createState() => _VideoSlideState();
+}
+
+class _VideoSlideState extends State<_VideoSlide> {
+  VideoPlayerController? _controller;
+  bool _isReady = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initVideo();
+  }
+
+  Future<void> _initVideo() async {
+    try {
+      final file = File(widget.path);
+      if (!file.existsSync()) {
+        setState(() => _hasError = true);
+        return;
+      }
+
+      _controller = VideoPlayerController.file(file);
+      await _controller!.initialize();
+      await _controller!.setLooping(true);
+
+      if (!mounted) return;
+      setState(() => _isReady = true);
+    } catch (e) {
+      debugPrint("Video init error: $e");
+      if (!mounted) return;
+      setState(() => _hasError = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    setState(() {
+      if (_controller!.value.isPlaying) {
+        _controller!.pause();
+      } else {
+        _controller!.play();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // dark background
-        Positioned.fill(
-          child: Container(color: const Color(0xFF101012)),
-        ),
-        const Center(
-          child: Icon(
-            CupertinoIcons.play_circle_fill,
-            color: CupertinoColors.white,
-            size: 72,
+    if (_hasError) {
+      return const Center(
+        child: Text(
+          "Video not found or failed to load",
+          style: TextStyle(
+            color: CupertinoColors.systemGrey,
+            fontSize: 16,
           ),
         ),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
-          child: Text(
-            "Video",
-            style: TextStyle(
-              color: CupertinoColors.white.withOpacity(0.9),
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+      );
+    }
+
+    if (!_isReady || _controller == null) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+
+    return GestureDetector(
+      onTap: _togglePlay,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _controller!.value.size.width,
+                height: _controller!.value.size.height,
+                child: VideoPlayer(_controller!),
+              ),
             ),
           ),
-        ),
-      ],
+          if (!_controller!.value.isPlaying)
+            const Icon(
+              CupertinoIcons.play_circle_fill,
+              color: CupertinoColors.white,
+              size: 72,
+            ),
+        ],
+      ),
     );
   }
 }
