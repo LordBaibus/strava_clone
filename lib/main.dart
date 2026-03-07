@@ -3254,11 +3254,15 @@ class _SharePageState extends State<SharePage> {
   }
 
   Future<void> _save() async {
-    // Desktop: save PNG to Downloads/Documents
-    if (_isDesktop) {
-      try {
-        final outPng = await _captureKeyToPngFile(_fullPreviewKey);
+    try {
+      // DESKTOP: only PNG export is supported in your current code
+      if (_isDesktop) {
+        if (_bgVideo != null) {
+          _toast("Video export is not supported on desktop in your current build. Only PNG export works.");
+          return;
+        }
 
+        final outPng = await _captureKeyToPngFile(_fullPreviewKey);
         final downloads = await getDownloadsDirectory();
         final baseDir = downloads ?? await getApplicationDocumentsDirectory();
 
@@ -3267,50 +3271,59 @@ class _SharePageState extends State<SharePage> {
 
         await File(outPng).copy(dest.path);
         _toast("Saved PNG:\n${dest.path}");
-      } catch (e) {
-        debugPrint("desktop save error: $e");
-        _toast("Failed to save.\n$e");
+        return;
       }
-      return;
-    }
 
-    // Mobile/mac: PhotoManager
-    final ps = await pm.PhotoManager.requestPermissionExtend();
-    final ok = ps.isAuth || ps.hasAccess;
-    if (!ok) {
-      _toast("Photos permission denied.");
-      return;
-    }
+      // MOBILE / iOS / Android
+      final ps = await pm.PhotoManager.requestPermissionExtend();
+      final ok = ps.isAuth || ps.hasAccess;
+      if (!ok) {
+        _toast("Photos permission denied.");
+        return;
+      }
 
-    if (_bgVideo == null) {
-      final outPng = await _captureKeyToPngFile(_fullPreviewKey);
-      final saved = await pm.PhotoManager.editor.saveImageWithPath(
-        outPng,
-        title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
+      // IMAGE BACKGROUND
+      if (_bgVideo == null) {
+        final outPng = await _captureKeyToPngFile(_fullPreviewKey);
+        final saved = await pm.PhotoManager.editor.saveImageWithPath(
+          outPng,
+          title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
+        );
+        _toast(saved != null ? "Saved image to Photos/Gallery." : "Failed to save image.");
+        return;
+      }
+
+      // VIDEO BACKGROUND
+      final overlayPng = await _captureKeyToPngFile(_overlayOnlyKey);
+      final inVideo = _bgVideo!.path;
+      final dir = await getTemporaryDirectory();
+      final outVideo = "${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}.mp4";
+
+      final cmd =
+          '-y -i "$inVideo" -i "$overlayPng" '
+          '-filter_complex "[1:v][0:v]scale2ref[ov][base];[base][ov]overlay=0:0:format=auto" '
+          '-map 0:a? -c:a copy -c:v libx264 -preset veryfast -crf 18 "$outVideo"';
+
+      await FFmpegKit.execute(cmd);
+
+      final outputFile = File(outVideo);
+      if (!await outputFile.exists()) {
+        _toast("Video export failed. FFmpeg did not create the output file.");
+        return;
+      }
+
+      final savedVideo = await pm.PhotoManager.editor.saveVideo(
+        outputFile,
+        title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.mp4",
       );
-      _toast(saved != null ? "Saved image to Photos/Gallery." : "Failed to save image.");
-      return;
+
+      _toast(savedVideo != null
+          ? "Saved video to Photos/Gallery."
+          : "Failed to save video.");
+    } catch (e) {
+      debugPrint("Save error: $e");
+      _toast("Save failed.\n$e");
     }
-
-    // Video export (mobile/mac only) using FFmpeg + overlay
-    final overlayPng = await _captureKeyToPngFile(_overlayOnlyKey);
-    final inVideo = _bgVideo!.path;
-    final dir = await getTemporaryDirectory();
-    final outVideo = "${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}.mp4";
-
-    final cmd =
-        '-y -i "$inVideo" -i "$overlayPng" '
-        '-filter_complex "[1:v][0:v]scale2ref[ov][base];[base][ov]overlay=0:0:format=auto" '
-        '-map 0:a? -c:a copy -c:v libx264 -preset veryfast -crf 18 "$outVideo"';
-
-    await FFmpegKit.execute(cmd);
-
-    final savedVideo = await pm.PhotoManager.editor.saveVideo(
-      File(outVideo),
-      title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.mp4",
-    );
-
-    _toast(savedVideo != null ? "Saved video to Photos/Gallery." : "Failed to save video.");
   }
 
   void _toast(String msg) {
@@ -3529,7 +3542,7 @@ class _ShareOverlay extends StatelessWidget {
               border: Border.all(color: Colors.white.withOpacity(0.65), width: 1),
             ),
             child: const Text(
-              "",
+              "STRAVA",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
