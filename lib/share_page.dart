@@ -326,9 +326,12 @@ class _SharePageState extends State<SharePage> {
         return;
       }
 
-      final ps = await pm.PhotoManager.requestPermissionExtend();
-      final ok = ps.isAuth || ps.hasAccess;
-      if (!ok) {
+      final permission = await pm.PhotoManager.requestPermissionExtend();
+      debugPrint(
+        "Photo permission -> isAuth: ${permission.isAuth}, hasAccess: ${permission.hasAccess}",
+      );
+
+      if (!(permission.isAuth || permission.hasAccess)) {
         _toast("Photos permission denied.");
         return;
       }
@@ -340,20 +343,47 @@ class _SharePageState extends State<SharePage> {
         final outPng =
         await _captureKeyToPngFile(_fullPreviewKey, pixelRatio: 2.0);
 
-        final bytes = await File(outPng).readAsBytes();
+        final pngFile = File(outPng);
+        final exists = await pngFile.exists();
+        if (!exists) {
+          _toast("Capture failed. PNG file was not created.");
+          return;
+        }
+
+        final bytes = await pngFile.readAsBytes();
+        if (bytes.isEmpty) {
+          _toast("Capture failed. PNG file is empty.");
+          return;
+        }
+
+        debugPrint("Captured PNG path: $outPng");
+        debugPrint("Captured PNG bytes: ${bytes.length}");
 
         final stamp = DateTime.now().millisecondsSinceEpoch;
-        final saved = await pm.PhotoManager.editor.saveImage(
-          bytes,
-          title: "strava_share_$stamp.png",
-          filename: "strava_share_$stamp.png",
-        );
 
-        _toast(
-          saved != null
-              ? "Saved image to Photos/Gallery."
-              : "Failed to save image.",
-        );
+        try {
+          final saved = await pm.PhotoManager.editor.saveImage(
+            bytes,
+            title: "strava_share_$stamp.png",
+            filename: "strava_share_$stamp.png",
+          );
+
+          debugPrint("saveImage result: $saved");
+
+          if (saved != null) {
+            _toast("Saved image to Photos/Gallery.");
+            return;
+          }
+        } catch (e, st) {
+          debugPrint("PhotoManager saveImage error: $e");
+          debugPrint("$st");
+        }
+
+        final docs = await getApplicationDocumentsDirectory();
+        final fallbackPath = "${docs.path}/strava_share_$stamp.png";
+        final fallbackFile = await pngFile.copy(fallbackPath);
+
+        _toast("Gallery save failed.\nSaved locally instead:\n${fallbackFile.path}");
         return;
       }
 
@@ -532,10 +562,7 @@ class _SharePageState extends State<SharePage> {
                           child: SizedBox(
                             width: previewW,
                             height: previewH,
-                            child: const ColoredBox(
-                              color: Color(0x00000000),
-                              child: SizedBox.shrink(),
-                            ),
+                            child: overlay,
                           ),
                         ),
                       ),
