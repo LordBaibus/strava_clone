@@ -9,7 +9,6 @@ import 'package:ffmpeg_kit_min_gpl/return_code.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/rendering.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:path_provider/path_provider.dart';
@@ -40,7 +39,8 @@ class _SharePageState extends State<SharePage> {
   late final String _timeText;
   late final List<LatLng> _route;
 
-  bool get _isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  bool get _isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
@@ -55,8 +55,9 @@ class _SharePageState extends State<SharePage> {
         ? widget.activity['avgPace'] as String
         : _calcPaceFallback(widget.activity);
 
-    final secs =
-    (widget.activity['durationSeconds'] is int) ? widget.activity['durationSeconds'] as int : 0;
+    final secs = (widget.activity['durationSeconds'] is int)
+        ? widget.activity['durationSeconds'] as int
+        : 0;
     _timeText = _formatTime(secs);
 
     _route = _decodeRoute(widget.activity['route']);
@@ -70,13 +71,19 @@ class _SharePageState extends State<SharePage> {
 
   String _formatTime(int seconds) {
     if (seconds < 60) return "${seconds}s";
-    final m = seconds ~/ 60;
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
     final s = seconds % 60;
+
+    if (h > 0) {
+      return "${h}h ${m.toString().padLeft(2, '0')}m";
+    }
     return "${m}m ${s.toString().padLeft(2, '0')}s";
   }
 
   String _calcPaceFallback(Map<String, dynamic> a) {
-    final dist = (a['distanceKm'] is num) ? (a['distanceKm'] as num).toDouble() : 0.0;
+    final dist =
+    (a['distanceKm'] is num) ? (a['distanceKm'] as num).toDouble() : 0.0;
     final secs = (a['durationSeconds'] is int) ? a['durationSeconds'] as int : 0;
     if (dist <= 0 || secs <= 0) return "-:--";
     final minPerKm = (secs / 60.0) / dist;
@@ -105,9 +112,11 @@ class _SharePageState extends State<SharePage> {
       context: context,
       builder: (_) => CupertinoActionSheet(
         title: const Text("Background"),
-        message: Text(_isDesktop
-            ? "On desktop, choose a file (camera isn't supported)."
-            : "Pick an image/video background."),
+        message: Text(
+          _isDesktop
+              ? "On desktop, choose a file (camera isn't supported)."
+              : "Pick an image/video background.",
+        ),
         actions: [
           if (!_isDesktop)
             CupertinoActionSheetAction(
@@ -130,14 +139,18 @@ class _SharePageState extends State<SharePage> {
               Navigator.pop(context);
               await _pickImage();
             },
-            child: Text(_isDesktop ? "Choose Photo (File)" : "Choose Photo (Gallery)"),
+            child: Text(
+              _isDesktop ? "Choose Photo (File)" : "Choose Photo (Gallery)",
+            ),
           ),
           CupertinoActionSheetAction(
             onPressed: () async {
               Navigator.pop(context);
               await _pickVideo();
             },
-            child: Text(_isDesktop ? "Choose Video (File)" : "Choose Video (Gallery)"),
+            child: Text(
+              _isDesktop ? "Choose Video (File)" : "Choose Video (Gallery)",
+            ),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
@@ -160,7 +173,8 @@ class _SharePageState extends State<SharePage> {
         return;
       }
 
-      final xf = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 92);
+      final xf =
+      await _picker.pickImage(source: ImageSource.gallery, imageQuality: 92);
       if (xf == null) return;
       await _setBackgroundImage(File(xf.path));
     } catch (e) {
@@ -218,6 +232,7 @@ class _SharePageState extends State<SharePage> {
     await _videoCtrl?.dispose();
     _videoCtrl = null;
 
+    if (!mounted) return;
     setState(() {
       _bgVideo = null;
       _bgImage = file;
@@ -231,6 +246,11 @@ class _SharePageState extends State<SharePage> {
     await c.initialize();
     await c.setLooping(true);
     await c.play();
+
+    if (!mounted) {
+      await c.dispose();
+      return;
+    }
 
     setState(() {
       _bgImage = null;
@@ -283,10 +303,11 @@ class _SharePageState extends State<SharePage> {
     setState(() => _isSaving = true);
 
     try {
-      // DESKTOP
       if (_isDesktop) {
         if (_bgVideo != null) {
-          _toast("Video export is not supported on desktop in your current build. Only PNG export works.");
+          _toast(
+            "Video export is not supported on desktop in your current build. Only PNG export works.",
+          );
           return;
         }
 
@@ -302,7 +323,6 @@ class _SharePageState extends State<SharePage> {
         return;
       }
 
-      // iPhone / iPad / Android
       final ps = await pm.PhotoManager.requestPermissionExtend();
       final ok = ps.isAuth || ps.hasAccess;
       if (!ok) {
@@ -310,21 +330,22 @@ class _SharePageState extends State<SharePage> {
         return;
       }
 
-      // IMAGE BACKGROUND
       if (_bgVideo == null) {
-        final outPng = await _captureKeyToPngFile(_fullPreviewKey, pixelRatio: 2.0);
+        final outPng =
+        await _captureKeyToPngFile(_fullPreviewKey, pixelRatio: 2.0);
         final saved = await pm.PhotoManager.editor.saveImageWithPath(
           outPng,
           title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
         );
 
-        _toast(saved != null
-            ? "Saved image to Photos/Gallery."
-            : "Failed to save image.");
+        _toast(
+          saved != null
+              ? "Saved image to Photos/Gallery."
+              : "Failed to save image.",
+        );
         return;
       }
 
-      // VIDEO BACKGROUND
       if (_videoCtrl != null && _videoCtrl!.value.isPlaying) {
         await _videoCtrl!.pause();
       }
@@ -346,8 +367,7 @@ class _SharePageState extends State<SharePage> {
       final dir = await getTemporaryDirectory();
       final outVideo = "${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}.mp4";
 
-      final cmd =
-          '-y '
+      final cmd = '-y '
           '-i "$inVideo" '
           '-i "$overlayPng" '
           '-filter_complex "[1:v][0:v]scale2ref=flags=lanczos[ov][base];[base][ov]overlay=0:0" '
@@ -386,9 +406,11 @@ class _SharePageState extends State<SharePage> {
         title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.mp4",
       );
 
-      _toast(savedVideo != null
-          ? "Saved video to Photos/Gallery."
-          : "Export succeeded, but saving to Photos failed.");
+      _toast(
+        savedVideo != null
+            ? "Saved video to Photos/Gallery."
+            : "Export succeeded, but saving to Photos failed.",
+      );
     } catch (e, st) {
       debugPrint("Save error: $e");
       debugPrint("$st");
@@ -447,122 +469,144 @@ class _SharePageState extends State<SharePage> {
             const bottomPad = 18.0;
             const btnRowTopPad = 8.0;
 
-            final availableH = c.maxHeight - (topGap + btnRowTopPad + btnH + bottomPad + 10);
             final maxW = math.min(420.0, c.maxWidth - side * 2);
-            final wByH = availableH * 9 / 16;
+            final maxPreviewH = math.max(
+              320.0,
+              c.maxHeight - (topGap + btnRowTopPad + btnH + bottomPad + 24),
+            );
 
-            final previewW = math.max(280.0, math.min(maxW, wByH));
+            final previewW = math.min(maxW, maxPreviewH * 9 / 16);
             final previewH = previewW * 16 / 9;
 
-            return Column(
-              children: [
-                const SizedBox(height: topGap),
-
-                Center(
-                  child: SizedBox(
-                    width: previewW,
-                    height: previewH,
-                    child: RepaintBoundary(
-                      key: _fullPreviewKey,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _BackgroundView(image: _bgImage, videoCtrl: _videoCtrl),
-                            overlay,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(side, topGap, side, bottomPad),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: c.maxHeight - topGap - bottomPad,
                 ),
-
-                Transform.translate(
-                  offset: const Offset(-10000, 0),
-                  child: IgnorePointer(
-                    child: SizedBox(
-                      width: previewW,
-                      height: previewH,
-                      child: RepaintBoundary(
-                        key: _overlayOnlyKey,
-                        child: Container(
-                          color: Colors.transparent,
-                          child: overlay,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const Spacer(),
-
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(side, btnRowTopPad, side, bottomPad),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _pickBackground,
-                          child: Container(
-                            height: btnH,
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.black,
-                              borderRadius: BorderRadius.circular(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: SizedBox(
+                        width: previewW,
+                        height: previewH,
+                        child: RepaintBoundary(
+                          key: _fullPreviewKey,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                _BackgroundView(
+                                  image: _bgImage,
+                                  videoCtrl: _videoCtrl,
+                                ),
+                                overlay,
+                              ],
                             ),
-                            child: const Center(
-                              child: Text(
-                                "Background",
-                                style: TextStyle(
-                                  color: CupertinoColors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(
+                      width: 1,
+                      height: 1,
+                      child: OverflowBox(
+                        maxWidth: previewW,
+                        maxHeight: previewH,
+                        child: RepaintBoundary(
+                          key: _overlayOnlyKey,
+                          child: SizedBox(
+                            width: previewW,
+                            height: previewH,
+                            child: const ColoredBox(
+                              color: Color(0x00000000),
+                              child: SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _pickBackground,
+                            child: Container(
+                              height: btnH,
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.black,
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  "Background",
+                                  style: TextStyle(
+                                    color: CupertinoColors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _save,
-                          child: Container(
-                            height: btnH,
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.activeOrange,
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                "Save",
-                                style: TextStyle(
-                                  color: CupertinoColors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _isSaving ? null : _save,
+                            child: Opacity(
+                              opacity: _isSaving ? 0.7 : 1,
+                              child: Container(
+                                height: btnH,
+                                decoration: BoxDecoration(
+                                  color: CupertinoColors.activeOrange,
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                child: Center(
+                                  child: _isSaving
+                                      ? const CupertinoActivityIndicator(
+                                    color: CupertinoColors.white,
+                                  )
+                                      : const Text(
+                                    "Save",
+                                    style: TextStyle(
+                                      color: CupertinoColors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         ),
       ),
     );
   }
-} // ✅ IMPORTANT: closes _SharePageState
+}
 
 class _BackgroundView extends StatelessWidget {
   final File? image;
   final VideoPlayerController? videoCtrl;
 
-  const _BackgroundView({required this.image, required this.videoCtrl});
+  const _BackgroundView({
+    required this.image,
+    required this.videoCtrl,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -608,72 +652,135 @@ class _ShareOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          top: 18,
-          left: 18,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.45),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.white.withOpacity(0.65), width: 1),
-            ),
-            child: const Text(
-              "STRAVA",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-        ),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("Distance",
-                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text("${distanceKm.toStringAsFixed(2)} km",
-                    style: const TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 22),
-                const Text("Pace",
-                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text("$pace /km",
-                    style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 22),
-                const Text("Time",
-                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text(time,
-                    style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 26),
-                SizedBox(
-                  width: 160,
-                  height: 160,
-                  child: CustomPaint(
-                    painter: _ShareRoutePainter(route: route),
+    return LayoutBuilder(
+      builder: (context, c) {
+        final h = c.maxHeight;
+        final logoTop = h * 0.035;
+        final contentTop = h * 0.09;
+        final routeBox = math.max(90.0, math.min(160.0, h * 0.24));
+        final distanceValue = math.max(24.0, math.min(48.0, h * 0.075));
+        final metricTitle = math.max(14.0, math.min(22.0, h * 0.034));
+        final paceValue = math.max(24.0, math.min(44.0, h * 0.068));
+        final timeValue = math.max(22.0, math.min(44.0, h * 0.068));
+        final bottomBrand = math.max(18.0, math.min(34.0, h * 0.05));
+
+        return Stack(
+          children: [
+            Positioned(
+              top: logoTop,
+              left: 18,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.45),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.65),
+                    width: 1,
                   ),
                 ),
-                const SizedBox(height: 18),
-                const Text(
+                child: const Text(
                   "STRAVA",
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 34,
+                    fontSize: 14,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
+                    letterSpacing: 0.5,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ],
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, contentTop, 20, 20),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: 320,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Distance",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: metricTitle,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          "${distanceKm.toStringAsFixed(2)} km",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: distanceValue,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          "Pace",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: metricTitle,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          "$pace /km",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: paceValue,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          "Time",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: metricTitle,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          time,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: timeValue,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 26),
+                        SizedBox(
+                          width: routeBox,
+                          height: routeBox,
+                          child: CustomPaint(
+                            painter: _ShareRoutePainter(route: route),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          "STRAVA",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: bottomBrand,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -708,7 +815,7 @@ class _ShareRoutePainter extends CustomPainter {
 
     Offset mapPoint(LatLng p) {
       final x = (p.longitude - minLng) / safeLng;
-      final y = (maxLat - p.latitude) / safeLat; // invert
+      final y = (maxLat - p.latitude) / safeLat;
       return Offset(
         pad + x * scale + (w - scale) / 2,
         pad + y * scale + (h - scale) / 2,
@@ -735,5 +842,7 @@ class _ShareRoutePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ShareRoutePainter oldDelegate) => oldDelegate.route != route;
+  bool shouldRepaint(covariant _ShareRoutePainter oldDelegate) {
+    return oldDelegate.route != route;
+  }
 }
