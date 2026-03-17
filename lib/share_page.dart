@@ -311,6 +311,9 @@ class _SharePageState extends State<SharePage> {
           return;
         }
 
+        await Future.delayed(const Duration(milliseconds: 150));
+        await WidgetsBinding.instance.endOfFrame;
+
         final outPng = await _captureKeyToPngFile(_fullPreviewKey);
         final downloads = await getDownloadsDirectory();
         final baseDir = downloads ?? await getApplicationDocumentsDirectory();
@@ -331,11 +334,19 @@ class _SharePageState extends State<SharePage> {
       }
 
       if (_bgVideo == null) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        await WidgetsBinding.instance.endOfFrame;
+
         final outPng =
         await _captureKeyToPngFile(_fullPreviewKey, pixelRatio: 2.0);
-        final saved = await pm.PhotoManager.editor.saveImageWithPath(
-          outPng,
-          title: "strava_share_${DateTime.now().millisecondsSinceEpoch}.png",
+
+        final bytes = await File(outPng).readAsBytes();
+
+        final stamp = DateTime.now().millisecondsSinceEpoch;
+        final saved = await pm.PhotoManager.editor.saveImage(
+          bytes,
+          title: "strava_share_$stamp.png",
+          filename: "strava_share_$stamp.png",
         );
 
         _toast(
